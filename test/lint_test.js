@@ -106,6 +106,10 @@ reported('check', 'job write permission', '    timeout-minutes: 30\n', '    time
 reported('check', 'a schedule', 'on:\n', 'on:\n  schedule:\n    - cron: "0 0 * * *"\n', 'extra trigger');
 reported('check', 'an action pinned by tag', 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1', 'actions/checkout@main', 'pinned by commit');
 
+reported('check', 'the live fixture step not copying the fixture', 'cp test/fixtures/mopm_live.rb', 'cp test/fixtures/mopm.rb', 'Live fixture');
+reported('check', 'the live fixture step not listing mopm', '            echo mopm >> "$RUNNER_TEMP/formulae"\n', '', 'Live fixture');
+reported('check', 'the live fixture step removed', '      - name: Live fixture\n', '      - name: Something else\n', 'Live fixture');
+reported('check', 'the live fixture chosen by a change under .github/ only', "'^(\\.github|test)/'", "'^(\\.github)/'", 'live fixture is not chosen');
 test('a comment that mentions a matrix, a secret or pull_request_target is not a finding', () => {
   const text = checkText.replace('name: check\n', 'name: check\n# matrix secrets.X pull_request_target workflow_dispatch\n');
   assert.deepEqual(lint.check(text), []);

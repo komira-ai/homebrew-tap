@@ -52,8 +52,10 @@ It refuses the PR unless all of these hold:
 - the whole formula is the renderer's output, line for line (the allow-list, below). Nothing is searched for or denied: a
   line is allowed because it is on the list, and a formula with one line more, fewer or different is refused, with a reason
   that names the first line that differs (`line 9 is "...", it must be "..."`);
-- the version is higher than the formula's on `main`, when there is one; the copy on `main` is read for its one
-  `version "X.Y.Z"` line, and a missing, duplicate or non-X.Y.Z one is a refusal, not a pass;
+- the version is higher than the formula's on `main`, when there is one; the copy on `main` is read for the version of its
+  `url` lines (all of them release urls of this formula, one version, directory and file name agreeing), and a missing,
+  mixed or non-X.Y.Z one is a refusal, not a pass. An old-shape `version "X.Y.Z"` line there is tolerated (at most one, equal
+  to the urls'), never trusted;
 - the tag `v<version>` exists in `<owner>/<formula>`. This assumes every tool repository is public: the guard reads the tag
   with this repository's read-only token, which cannot see a private repository, so a private tool reads as "no such tag" and
   its PRs are refused (the check fails closed, it never passes by default).
@@ -71,8 +73,7 @@ a final newline and nothing after it; CRLF, a comment, a blank line or a trailin
 class <Class> < Formula                     # <Class>: the formula name, capitalised at each "-" (mopm -> Mopm, my-tool -> MyTool)
   desc "<text>"                             # <text>: what the renderer's plainText allows: non-empty, no control character,
   homepage "<text>"                         #         and none of  "  \  #  (so it cannot leave its string or interpolate)
-  version "<V>"                             # <V>: the version of the branch bump/<name>-v<V>
-  license "<text>"
+  license "<text>"                          # no `version` line: brew takes the version from the urls (<V> below is the branch's)
 
   on_macos do
     on_arm do
@@ -103,17 +104,18 @@ end
 ```
 
 (Comments after `#` above are this README's; the file has none.) The holes are bound, not free: `<name>` and `<V>` come from the
-branch (so one name and one version, and every url's version is the version line's), `<owner>` is this repository's owner.
+branch (so one name and one version, and every url's version is that one version: the urls carry it, there is no `version` line), `<owner>` is this repository's owner.
 The targets are exactly `linux-x86_64`, `linux-aarch64` and `macos-arm64`, in the renderer's nesting; there is no Intel
 macOS. The only free text is `desc`, `homepage` and `license`, and the three hashes.
 
 Because only the listed lines can be present, there is no Ruby the formula can carry that the list does not name: no extra
-method, `send`, `eval`, `require`, heredoc, second `url` or `version`, `file://` base, or `on_intel` outside `on_linux`. The
+method, `send`, `eval`, `require`, heredoc, second `url`, any `version` line (`brew audit --strict` refuses one equal to the
+version scanned from the urls: "version is redundant"), `file://` base, or `on_intel` outside `on_linux`. The
 words `version` and `url` are fine inside a `desc` (they are inside a string that cannot be closed).
 
 The version already on `main` is read differently: that text is history the guard accepted earlier, possibly in an older
-shape, so it is not matched against the template. Exactly one line `  version "X.Y.Z"` is read from it; none, several or a
-non-X.Y.Z one is a refusal.
+shape (it may still carry a `version` line), so it is not matched against the template. Its version is read from its urls (see
+above); none, mixed or non-X.Y.Z ones are a refusal, and so is a `version` line that disagrees with them.
 
 What the list does not prove: that the hashes are the release's (the bot copies them from the release's SHA256SUMS; `check`
 installs the formula on macOS), or that the description is true. A formula that matches the list can still be wrong, only not
@@ -137,7 +139,7 @@ then re-run the release's publish step for that version. The template never acce
 during the change the old shape is refused; do the two steps close together.
 
 The tests pin the renderer's output as `test/fixtures/mopm.rb` (the golden, which must be accepted) and the older or flagged
-renders (no `version` line, `--url-base` file URL, the Intel macOS render), which must be refused. A generated test breaks
+renders (the default render with a `version` line, `--url-base` file URL, the Intel macOS render), which must be refused. A generated test breaks
 every line of the golden four ways (delete it, duplicate it, append ` # x`, change one non-hole character) and requires a
 refusal each time.
 renderer (`test/fixtures`, with `PROVENANCE`) and require it to accept the one the bot writes and refuse planted variants.

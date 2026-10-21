@@ -107,6 +107,9 @@ function check(text) {
   if (!has(t, /^jobs:\n  check:\n    name: check\n/m)) p.push('check: the job is not "check" named "check"');
   // The tests of the guard and of this lint run on the hosted runner, as a step that fails the job (no `|| true`).
   if (!has(t, /^      - name: Guard and lint tests\n        run: node --test test\/guard_test\.js test\/lint_test\.js[ \t]*$/m)) p.push('check: the step "Guard and lint tests" is not exactly "node --test test/guard_test.js test/lint_test.js"');
+  // The live fixture is copied into the tapped copy and listed among the formulae that the audit, style, install and test steps loop over.
+  if (!has(t, /^      - name: Live fixture\n(?:.*\n)*?        run: \|\n(?:.*\n)*?            cp test\/fixtures\/mopm_live\.rb "\$tap\/Formula\/mopm\.rb"\n(?:.*\n)*?            echo mopm >> "\$RUNNER_TEMP\/formulae"\n/m)) p.push('check: the step "Live fixture" does not copy test/fixtures/mopm_live.rb into the tap and list mopm among the formulae');
+  if (!has(t, /grep -Eq '\^\(\\\.github\|test\)\/' "\$RUNNER_TEMP\/touched"/)) p.push('check: the live fixture is not chosen by a change under .github/ or test/');
   const jobs = [...t.matchAll(/^  ([a-z_-]+):[ \t]*$/gm)].map((m) => m[1]).filter((k) => k !== 'pull_request' && k !== 'push');
   if (jobs.join(',') !== 'check') p.push('check: jobs are ' + JSON.stringify(jobs) + ', expected only check');
   const top = permissions(t, 0);

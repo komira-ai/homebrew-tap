@@ -1,7 +1,6 @@
 class Mopm < Formula
   desc "Package manager for Mojo"
   homepage "https://mopm.dev"
-  version "1.2.3"
   license "Apache-2.0"
 
   on_macos do

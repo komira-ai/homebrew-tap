@@ -53,8 +53,12 @@ jobs:
         run: |
           set -eu
           : > "$RUNNER_TEMP/formulae"
+          echo no > "$RUNNER_TEMP/live"
           if [ "$EVENT" = pull_request ]; then
             git diff --name-only --diff-filter=AM "$BASE" HEAD -- Formula > "$RUNNER_TEMP/changed"
+            # A pull request that changes the tap's own machinery (.github/ or test/) also checks the live fixture, below.
+            git diff --no-renames --name-only "$BASE" HEAD > "$RUNNER_TEMP/touched"
+            if grep -Eq '^(\.github|test)/' "$RUNNER_TEMP/touched"; then echo yes > "$RUNNER_TEMP/live"; fi
           else
             git ls-files Formula > "$RUNNER_TEMP/changed"
           fi
@@ -65,6 +69,23 @@ jobs:
         env:
           WORKSPACE: ${{ github.workspace }}
         run: brew tap "${GITHUB_REPOSITORY_OWNER}/tap" "$WORKSPACE"
+
+      # The renderer's output for a real release, test/fixtures/mopm_live.rb (mopm 0.0.10, with the release's real SHA256SUMS),
+      # goes through the same audit, style, install and test below as a formula, so a pull request that touches .github/ or
+      # test/ proves that brew accepts the shape the guard admits and that the release installs. It is copied into the tapped
+      # copy only (never into Formula/ of the checkout), and not when the pull request itself changes Formula/mopm.rb.
+      - name: Live fixture
+        run: |
+          set -eu
+          if [ "$(cat "$RUNNER_TEMP/live")" = yes ] && ! grep -qx mopm "$RUNNER_TEMP/formulae"; then
+            tap="$(brew --repository "${GITHUB_REPOSITORY_OWNER}/tap")"
+            mkdir -p "$tap/Formula"
+            cp test/fixtures/mopm_live.rb "$tap/Formula/mopm.rb"
+            echo mopm >> "$RUNNER_TEMP/formulae"
+            echo "live fixture: test/fixtures/mopm_live.rb is checked as ${GITHUB_REPOSITORY_OWNER}/tap/mopm"
+          else
+            echo "live fixture: not checked (no .github/ or test/ change, or the pull request has its own Formula/mopm.rb)"
+          fi
 
       - name: Audit (strict)
         run: |

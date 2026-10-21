@@ -29,7 +29,7 @@ function renderFormula(o = {}) {
     'class ' + cls + ' < Formula',
     '  desc "' + desc + '"',
     '  homepage "' + homepage + '"',
-    '  version "' + version + '"',
+    ...(o.withVersion ? ['  version "' + version + '"'] : []),
     '  license "' + license + '"',
     '',
     '  on_macos do',
@@ -61,7 +61,7 @@ function renderFormula(o = {}) {
     '',
   ].join('\n');
 }
-const formulaText = (version, owner, name) => renderFormula({ version, owner, name });
+const formulaText = (version, owner, name, withVersion) => renderFormula({ version, owner, name, withVersion });
 
 const err = (status) => Object.assign(new Error('http ' + status), { status });
 
@@ -190,10 +190,21 @@ const modified = [{ filename: 'Formula/tool.rb', status: 'modified' }];
 refused('the same version as the base', { files: modified, base: formulaText('1.2.3') }, 'is not higher than 1.2.3');
 refused('a lower version than the base', { files: modified, base: formulaText('1.3.0') }, 'is not higher than 1.3.0');
 refused('a lower version by a longer number (1.2.3 vs 1.2.10)', { files: modified, base: formulaText('1.2.10') }, 'is not higher than 1.2.10');
-refused('a base with no version line', { files: modified, base: formulaText('1.0.0').replace('  version "1.0.0"\n', '') }, '0 version lines');
-refused('a base with two version lines', { files: modified, base: formulaText('1.0.0').replace('  desc "A tool"', '  version "1.0.0"\n  desc "A tool"') }, '2 version lines');
-refused('a base with a non-X.Y.Z version', { files: modified, base: formulaText('1.0.0').replace('version "1.0.0"', 'version "latest"') }, 'not X.Y.Z');
-refused('a base with a prerelease version', { files: modified, base: formulaText('1.0.0').replace('version "1.0.0"', 'version "1.0.0-rc.1"') }, 'not X.Y.Z');
+test('accepts a higher version over a base in the old shape (with a version line)', async () => {
+  const s = scenario({ version: '1.2.4', files: modified, base: formulaText('1.2.3', OWNER, 'tool', true) });
+  assert.equal((await g.decide(s.ctx)).version, '1.2.4');
+});
+refused('the same version as a base in the old shape (with a version line)', { files: modified, base: formulaText('1.2.3', OWNER, 'tool', true) }, 'is not higher than 1.2.3');
+refused('a lower version than a base in the old shape', { files: modified, base: formulaText('1.3.0', OWNER, 'tool', true) }, 'is not higher than 1.3.0');
+refused('a base with no url line', { files: modified, base: formulaText('1.0.0').split('\n').filter((l) => !/^ +url /.test(l)).join('\n') }, '0 url lines');
+refused('a base with a url that is not a release url of the repository', { files: modified, base: formulaText('1.0.0').replace('github.com/acme/tool', 'example.org/acme/tool') }, 'not a release url');
+refused('a base with a url of another repository', { files: modified, base: formulaText('1.0.0').replace('acme/tool/releases', 'acme/other/releases') }, 'not a release url');
+refused('a base with a url whose file name version differs from its directory', { files: modified, base: formulaText('1.0.0').replace('tool-1.0.0-macos-arm64', 'tool-1.0.1-macos-arm64') }, 'differs from its file name version');
+refused('a base with urls of two versions', { files: modified, base: formulaText('1.0.0').replace(/1\.0\.0-macos-arm64/, '1.0.1-macos-arm64').replace('v1.0.0/tool-1.0.1', 'v1.0.1/tool-1.0.1') }, 'urls of 2 different versions');
+refused('a base with a non-X.Y.Z url version', { files: modified, base: formulaText('1.0.0').replace(/1\.0\.0/g, '1.0.0-rc.1') }, 'not a release url');
+refused('a base with a url line that is not a string', { files: modified, base: formulaText('1.0.0').replace('  def install', '  url :x\n  def install') }, 'not a release url');
+refused('a base in the old shape with two version lines', { files: modified, base: formulaText('1.0.0', OWNER, 'tool', true).replace('  desc "A tool"', '  version "1.0.0"\n  desc "A tool"') }, '2 version lines');
+refused('a base in the old shape whose version line disagrees with its urls', { files: modified, base: formulaText('1.0.0', OWNER, 'tool', true).replace('version "1.0.0"', 'version "9.9.9"') }, 'its urls are of 1.0.0');
 refused('an added file that is already on the base at a higher version', { base: formulaText('2.0.0') }, 'is not higher than 2.0.0');
 
 // ---- the tag ----
@@ -281,57 +292,62 @@ test('accepts the holes the renderer allows: any plain desc, homepage, license (
 });
 
 // Fixtures the renderer writes under flags the bot never uses, and its output before the Intel Mac release was dropped.
-mopmRefusedAt('the renderer without a version line (--no-explicit-version)', fixture('mopm_no_version.rb'), 4);
-mopmRefusedAt('the renderer with a file:// base (--url-base)', fixture('mopm_file_url.rb'), 9);
-mopmRefusedAt('the renderer before Intel macOS was dropped (on_intel inside on_macos)', fixture('mopm_with_macos_intel.rb'), 12);
+mopmRefusedAt('the renderer with a version line (the default render, which brew audit --strict refuses as redundant)', fixture('mopm_with_version.rb'), 4);
+mopmRefusedAt('the renderer with a file:// base (--url-base)', fixture('mopm_file_url.rb'), 8);
+mopmRefusedAt('the renderer before Intel macOS was dropped, as it was (with a version line)', fixture('mopm_with_macos_intel.rb'), 4);
+const intelNoVersion = fixture('mopm_with_macos_intel.rb').replace('  version "1.2.3"\n', '');
+assert.notEqual(intelNoVersion, fixture('mopm_with_macos_intel.rb'));
+mopmRefusedAt('the renderer before Intel macOS was dropped, without its version line (on_intel inside on_macos)', intelNoVersion, 11);
 mopmRefusedAt('the golden with CRLF line endings', golden.replace(/\n/g, '\r\n'), 1);
-mopmRefusedAt('the golden without its final newline', golden.slice(0, -1), 33);
-mopmRefusedAt('the golden with a blank line at the end', golden + '\n', 34);
+mopmRefusedAt('the golden without its final newline', golden.slice(0, -1), 32);
+mopmRefusedAt('the golden with a blank line at the end', golden + '\n', 33);
 mopmRefusedAt('the golden for a branch of another formula name', golden, 1, { formula: 'other' });
-mopmRefusedAt('the golden for a tap of another owner', golden, 9, { owner: 'evil' });
-mopmRefusedAt('the golden with a version that is not the branch\'s', golden.replace(/1\.2\.3/g, '1.2.4'), 4);
-mopmRefusedAt('the golden whose version line is right but a url is of another release', golden.replace('download/v1.2.3/mopm-1.2.3-linux-aarch64', 'download/v1.2.2/mopm-1.2.3-linux-aarch64'), 16);
-mopmRefusedAt('the golden whose url file name carries another version', golden.replace('mopm-1.2.3-linux-x86_64', 'mopm-1.2.2-linux-x86_64'), 20);
-mopmRefusedAt('the golden with the macOS file under on_linux', golden.replace('mopm-1.2.3-linux-aarch64', 'mopm-1.2.3-macos-arm64'), 16);
-mopmRefusedAt('the golden with the linux targets swapped', golden.replace('linux-aarch64', 'TMP').replace('linux-x86_64', 'linux-aarch64').replace('TMP', 'linux-x86_64'), 16);
-mopmRefusedAt('the golden with a macos-x86_64 url in place of the macos-arm64 one', golden.replace('macos-arm64', 'macos-x86_64'), 9);
-mopmRefusedAt('the golden with a url of another host', golden.replace('https://github.com/komira-ai/mopm', 'https://example.org/komira-ai/mopm'), 9);
-mopmRefusedAt('the golden with a url of another repository', golden.replace('komira-ai/mopm/releases/download/v1.2.3/mopm-1.2.3-linux-x86_64', 'komira-ai/other/releases/download/v1.2.3/mopm-1.2.3-linux-x86_64'), 20);
-mopmRefusedAt('the golden with a url with a query', golden.replace('linux-x86_64.tar.gz', 'linux-x86_64.tar.gz?x=1'), 20);
-mopmRefusedAt('the golden with a single-quoted url', golden.replace('url "https://github.com/komira-ai/mopm/releases/download/v1.2.3/mopm-1.2.3-macos-arm64.tar.gz"', "url 'https://github.com/komira-ai/mopm/releases/download/v1.2.3/mopm-1.2.3-macos-arm64.tar.gz'"), 9);
-mopmRefusedAt('the golden with a single-quoted version', golden.replace('version "1.2.3"', "version '1.2.3'"), 4);
-mopmRefusedAt('the golden with the test block\'s command changed', golden.replace('--version")', '--version; id")'), 30);
-mopmRefusedAt('the golden with the test line for another name', golden.replace('"mopm #{version}"', '"tool #{version}"'), 30);
-mopmRefusedAt('the golden with a test block opened as post_install', golden.replace('  test do', '  post_install do'), 29);
+mopmRefusedAt('the golden for a tap of another owner', golden, 8, { owner: 'evil' });
+mopmRefusedAt('the golden with a version that is not the branch\'s', golden.replace(/1\.2\.3/g, '1.2.4'), 8);
+mopmRefusedAt('the golden whose version line is right but a url is of another release', golden.replace('download/v1.2.3/mopm-1.2.3-linux-aarch64', 'download/v1.2.2/mopm-1.2.3-linux-aarch64'), 15);
+mopmRefusedAt('the golden whose url file name carries another version', golden.replace('mopm-1.2.3-linux-x86_64', 'mopm-1.2.2-linux-x86_64'), 19);
+mopmRefusedAt('the golden with the macOS file under on_linux', golden.replace('mopm-1.2.3-linux-aarch64', 'mopm-1.2.3-macos-arm64'), 15);
+mopmRefusedAt('the golden with the linux targets swapped', golden.replace('linux-aarch64', 'TMP').replace('linux-x86_64', 'linux-aarch64').replace('TMP', 'linux-x86_64'), 15);
+mopmRefusedAt('the golden with a macos-x86_64 url in place of the macos-arm64 one', golden.replace('macos-arm64', 'macos-x86_64'), 8);
+mopmRefusedAt('the golden with a url of another host', golden.replace('https://github.com/komira-ai/mopm', 'https://example.org/komira-ai/mopm'), 8);
+mopmRefusedAt('the golden with a url of another repository', golden.replace('komira-ai/mopm/releases/download/v1.2.3/mopm-1.2.3-linux-x86_64', 'komira-ai/other/releases/download/v1.2.3/mopm-1.2.3-linux-x86_64'), 19);
+mopmRefusedAt('the golden with a url with a query', golden.replace('linux-x86_64.tar.gz', 'linux-x86_64.tar.gz?x=1'), 19);
+mopmRefusedAt('the golden with a single-quoted url', golden.replace('url "https://github.com/komira-ai/mopm/releases/download/v1.2.3/mopm-1.2.3-macos-arm64.tar.gz"', "url 'https://github.com/komira-ai/mopm/releases/download/v1.2.3/mopm-1.2.3-macos-arm64.tar.gz'"), 8);
+mopmRefusedAt('the golden with a version line added (equal to the urls\', which brew audit --strict refuses as redundant)', withLines(golden, (l) => [...l.slice(0, 3), '  version "1.2.3"', ...l.slice(3)]), 4);
+mopmRefusedAt('the golden with a version line of another version added', withLines(golden, (l) => [...l.slice(0, 3), '  version "9.9.9"', ...l.slice(3)]), 4);
+mopmRefusedAt('the golden with a version line added after the license', withLines(golden, (l) => [...l.slice(0, 4), '  version "1.2.3"', ...l.slice(4)]), 5);
+mopmRefusedAt('the golden with the test block\'s command changed', golden.replace('--version")', '--version; id")'), 29);
+mopmRefusedAt('the golden with the test line for another name', golden.replace('"mopm #{version}"', '"tool #{version}"'), 29);
+mopmRefusedAt('the golden with a test block opened as post_install', golden.replace('  test do', '  post_install do'), 28);
 
 // Every bypass of the earlier deny rules, as a head formula (each was accepted by an earlier guard or is its shape).
 const BYPASS_URL = 'url "https://example.org/x.tar.gz"';
 mopmRefusedAt('the indentation desync of on_macos and on_intel (a mis-indented end hides the on_intel block)',
-  fixture('mopm_with_macos_intel.rb').replace('    end\n  end\n\n  on_linux', '    end\n end\n\n  on_linux'), 12);
+  intelNoVersion.replace('    end\n  end\n\n  on_linux', '    end\n end\n\n  on_linux'), 11);
 mopmRefusedAt('the indentation desync with tabs on the on_macos block',
-  golden.replace('  on_macos do\n    on_arm do', '\ton_macos do\n    on_arm do').replace('    end\n  end\n\n  on_linux', '    end\n\tend\n\n  on_linux'), 7);
-mopmRefusedAt('a top-level on_intel block after the license', withLines(golden, (l) => [...l.slice(0, 5), '  on_intel do', '    ' + BYPASS_URL, '  end', ...l.slice(5)]), 6);
-mopmRefusedAt('a top-level on_intel block at the end of the class', withLines(golden, (l) => [...l.slice(0, 31), '  on_intel do', '    ' + BYPASS_URL, '  end', ...l.slice(31)]), 32);
-mopmRefusedAt('a heredoc whose line interpolates url', withLines(golden, (l) => [...l.slice(0, 5), '  x = <<~EOS', '#{url "https://example.org/x"}', '  EOS', ...l.slice(5)]), 6);
-mopmRefusedAt('a heredoc whose line is indented before its interpolation', withLines(golden, (l) => [...l.slice(0, 5), '  x = <<~EOS', '    \t#{version "9.9.9"}', '  EOS', ...l.slice(5)]), 6);
+  golden.replace('  on_macos do\n    on_arm do', '\ton_macos do\n    on_arm do').replace('    end\n  end\n\n  on_linux', '    end\n\tend\n\n  on_linux'), 6);
+mopmRefusedAt('a top-level on_intel block after the license', withLines(golden, (l) => [...l.slice(0, 4), '  on_intel do', '    ' + BYPASS_URL, '  end', ...l.slice(5)]), 5);
+mopmRefusedAt('a top-level on_intel block at the end of the class', withLines(golden, (l) => [...l.slice(0, 30), '  on_intel do', '    ' + BYPASS_URL, '  end', ...l.slice(31)]), 31);
+mopmRefusedAt('a heredoc whose line interpolates url', withLines(golden, (l) => [...l.slice(0, 4), '  x = <<~EOS', '#{url "https://example.org/x"}', '  EOS', ...l.slice(5)]), 5);
+mopmRefusedAt('a heredoc whose line is indented before its interpolation', withLines(golden, (l) => [...l.slice(0, 4), '  x = <<~EOS', '    \t#{version "9.9.9"}', '  EOS', ...l.slice(5)]), 5);
 mopmRefusedAt('"; version" after the homepage', golden.replace('"https://mopm.dev"', '"https://mopm.dev"; version "9.9.9"'), 3);
 mopmRefusedAt('"; version" inside the homepage string', golden.replace('https://mopm.dev', 'https://mopm.dev"; version "9.9.9'), 3);
-mopmRefusedAt('send with strings building url', withLines(golden, (l) => [...l.slice(0, 5), '  send("ur" + "l", "https://example.org/x")', ...l.slice(5)]), 6);
-mopmRefusedAt('public_send, eval and require lines', withLines(golden, (l) => [...l.slice(0, 5), '  public_send(:u.to_s + "rl", "x"); eval("1"); require "x"', ...l.slice(5)]), 6);
+mopmRefusedAt('send with strings building url', withLines(golden, (l) => [...l.slice(0, 4), '  send("ur" + "l", "https://example.org/x")', ...l.slice(5)]), 5);
+mopmRefusedAt('public_send, eval and require lines', withLines(golden, (l) => [...l.slice(0, 4), '  public_send(:u.to_s + "rl", "x"); eval("1"); require "x"', ...l.slice(5)]), 5);
 mopmRefusedAt('a desc that closes its string and calls send', golden.replace('Package manager for Mojo', 'x" + send("ur" + "l", "y") + "'), 2);
 mopmRefusedAt('a desc that interpolates', golden.replace('Package manager for Mojo', 'x #{system("id")}'), 2);
 mopmRefusedAt('a desc with a backslash', golden.replace('Package manager for Mojo', 'x\\'), 2);
 mopmRefusedAt('a desc with a tab', golden.replace('Package manager for Mojo', 'x\ty'), 2);
 mopmRefusedAt('an empty desc', golden.replace('Package manager for Mojo', ''), 2);
-mopmRefusedAt('a license with an interpolation', golden.replace('Apache-2.0', '#{1}'), 5);
-mopmRefusedAt('a second class method (an extra def)', withLines(golden, (l) => [...l.slice(0, 24), '  def self.x; end', ...l.slice(24)]), 25);
-mopmRefusedAt('a comment line anywhere', withLines(golden, (l) => [...l.slice(0, 5), '  # url "x"', ...l.slice(5)]), 6);
-mopmRefusedAt('the Intel Mac release rendered into the linux block', golden.replace('    on_intel do\n      url "https://github.com/komira-ai/mopm/releases/download/v1.2.3/mopm-1.2.3-linux-x86_64.tar.gz"', '    on_intel do\n      url "https://github.com/komira-ai/mopm/releases/download/v1.2.3/mopm-1.2.3-macos-x86_64.tar.gz"'), 20);
-mopmRefusedAt('sha256 of 63 digits', golden.replace('c'.repeat(64), 'c'.repeat(63)), 10);
-mopmRefusedAt('sha256 of 65 digits', golden.replace('c'.repeat(64), 'c'.repeat(65)), 10);
-mopmRefusedAt('sha256 in upper case', golden.replace('c'.repeat(64), 'C'.repeat(64)), 10);
-mopmRefusedAt('sha256 that is not hex', golden.replace('c'.repeat(64), 'g'.repeat(64)), 10);
-mopmRefusedAt('sha256 with a trailing modifier', golden.replace('c'.repeat(64) + '"', 'c'.repeat(64) + '" if true'), 10);
+mopmRefusedAt('a license with an interpolation', golden.replace('Apache-2.0', '#{1}'), 4);
+mopmRefusedAt('a second class method (an extra def)', withLines(golden, (l) => [...l.slice(0, 23), '  def self.x; end', ...l.slice(24)]), 24);
+mopmRefusedAt('a comment line anywhere', withLines(golden, (l) => [...l.slice(0, 4), '  # url "x"', ...l.slice(5)]), 5);
+mopmRefusedAt('the Intel Mac release rendered into the linux block', golden.replace('    on_intel do\n      url "https://github.com/komira-ai/mopm/releases/download/v1.2.3/mopm-1.2.3-linux-x86_64.tar.gz"', '    on_intel do\n      url "https://github.com/komira-ai/mopm/releases/download/v1.2.3/mopm-1.2.3-macos-x86_64.tar.gz"'), 19);
+mopmRefusedAt('sha256 of 63 digits', golden.replace('c'.repeat(64), 'c'.repeat(63)), 9);
+mopmRefusedAt('sha256 of 65 digits', golden.replace('c'.repeat(64), 'c'.repeat(65)), 9);
+mopmRefusedAt('sha256 in upper case', golden.replace('c'.repeat(64), 'C'.repeat(64)), 9);
+mopmRefusedAt('sha256 that is not hex', golden.replace('c'.repeat(64), 'g'.repeat(64)), 9);
+mopmRefusedAt('sha256 with a trailing modifier', golden.replace('c'.repeat(64) + '"', 'c'.repeat(64) + '" if true'), 9);
 
 // The generated test: take every line of the golden and break that one line four ways; each must be refused, and for the
 // edits of a line (append, change one character) the reason must name that very line.
@@ -386,7 +402,7 @@ test('every one-line mutant of a formula with a hyphenated name and other holes 
 });
 test('a hole refuses what the renderer\'s plainText refuses: a quote, a backslash, a hash, a control character, nothing', async () => {
   for (const bad of ['"', '\\', '#', '\r', '\x00', '\x1f', '\x7f', '']) {
-    for (const [prefix, at] of [['  desc "', 2], ['  homepage "', 3], ['  license "', 5]]) {
+    for (const [prefix, at] of [['  desc "', 2], ['  homepage "', 3], ['  license "', 4]]) {
       const ls = lines(golden);
       ls[at - 1] = prefix + 'a' + bad + 'b"';
       if (bad === '') ls[at - 1] = prefix + '"';
@@ -403,8 +419,9 @@ test('template: the renderer\'s nesting and targets, exactly three url lines', (
   assert.deepEqual(g.TARGETS.map((x) => [x.os, x.cpu, x.suffix]), [['macos', 'arm', 'macos-arm64'], ['linux', 'arm', 'linux-aarch64'], ['linux', 'intel', 'linux-x86_64']]);
   assert.ok(!t.some((l) => /x86_64|macos-x/.test(l) && !/linux-x86_64/.test(l)));
   assert.equal(t[1], '  desc "<text>"');
-  assert.equal(t[3], '  version "1.2.3"');
-  assert.equal(t.length, 33);
+  assert.equal(t[3], '  license "<text>"');
+  assert.ok(!t.some((l) => /^ *version /.test(l)), 'the template has no version line');
+  assert.equal(t.length, 32);
 });
 test('className: mopm is Mopm, my-tool is MyTool, a--b is AB', () => {
   assert.equal(g.className('mopm'), 'Mopm');
@@ -412,14 +429,30 @@ test('className: mopm is Mopm, my-tool is MyTool, a--b is AB', () => {
   assert.equal(g.className('a--b'), 'AB');
   assert.equal(g.className('tool2-x9'), 'Tool2X9');
 });
-test('baseVersion reads exactly one plain version line of the formula on main', () => {
-  assert.equal(g.baseVersion(golden, 'b'), '1.2.3');
-  assert.equal(g.baseVersion('class A\n  version "9.8.7"\nend\n', 'b'), '9.8.7');
-  for (const [text, why] of [['', '0 version lines'], ["  version '1.2.3'\n", '0 version lines'], ['  version "1.2.3"\n  version "1.2.3"\n', '2 version lines'], ['  version "1.2.3-rc.1"\n', 'not X.Y.Z'], ['  version "latest"\n', 'not X.Y.Z']]) {
-    assert.throws(() => g.baseVersion(text, 'b'), (e) => e instanceof g.Refusal && e.message.includes(why), JSON.stringify(text));
+test('baseVersion reads the version from the urls of the formula on main', () => {
+  assert.equal(g.baseVersion(golden, 'b', 'mopm', 'komira-ai'), '1.2.3');
+  assert.equal(g.baseVersion(fixture('mopm_with_version.rb'), 'b', 'mopm', 'komira-ai'), '1.2.3', 'the old shape, with a version line');
+  assert.equal(g.baseVersion(fixture('mopm_live.rb'), 'b', 'mopm', 'komira-ai'), '0.0.10');
+  assert.equal(g.baseVersion(fixture('mopm_with_macos_intel.rb'), 'b', 'mopm', 'komira-ai'), '1.2.3', 'the Intel Mac shape');
+  for (const [text, why] of [['', '0 url lines'], ['class A\n  version "9.8.7"\nend\n', '0 url lines']]) {
+    assert.throws(() => g.baseVersion(text, 'b', 'mopm', 'komira-ai'), (e) => e instanceof g.Refusal && e.message.includes(why), JSON.stringify(text));
   }
+  assert.throws(() => g.baseVersion(golden, 'b', 'mopm', 'evil'), (e) => e instanceof g.Refusal && e.message.includes('not a release url'));
+  assert.throws(() => g.baseVersion(golden, 'b', 'other', 'komira-ai'), (e) => e instanceof g.Refusal && e.message.includes('not a release url'));
 });
-test('a bump is accepted over a base written in an older shape (the base is only read for its one version line)', async () => {
+test('a bump is accepted over a base written in an older shape (the base is only read for its urls)', async () => {
   const s = scenario(Object.assign({ head: golden, base: fixture('mopm_with_macos_intel.rb').replace(/1\.2\.3/g, '1.2.2'), files: [{ filename: 'Formula/mopm.rb', status: 'modified' }] }, MOPM));
   assert.equal((await g.decide(s.ctx)).version, '1.2.3');
+});
+test('a bump is accepted over a base with a version line (the old shape)', async () => {
+  const s = scenario(Object.assign({ head: golden, base: fixture('mopm_with_version.rb').replace(/1\.2\.3/g, '1.2.2'), files: [{ filename: 'Formula/mopm.rb', status: 'modified' }] }, MOPM));
+  assert.equal((await g.decide(s.ctx)).version, '1.2.3');
+});
+// The live fixture: the renderer's no-version output for a real release, with that release's real checksums.
+test('accepts the live fixture (mopm 0.0.10, the real SHA256SUMS) as a new formula, and as a bump over the old shape of 0.0.9', async () => {
+  const live = fixture('mopm_live.rb');
+  assert.deepEqual(await g.decide(scenario(Object.assign({ head: live, version: '0.0.10' }, MOPM)).ctx), { formula: 'mopm', version: '0.0.10', path: 'Formula/mopm.rb' });
+  const old = live.replace(/0\.0\.10/g, '0.0.9').replace('  license', '  version "0.0.9"\n  license');
+  const s = scenario(Object.assign({ head: live, version: '0.0.10', base: old, files: [{ filename: 'Formula/mopm.rb', status: 'modified' }] }, MOPM));
+  assert.equal((await g.decide(s.ctx)).version, '0.0.10');
 });
