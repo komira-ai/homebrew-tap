@@ -87,6 +87,22 @@ jobs:
             echo "live fixture: not checked (no .github/ or test/ change, or the pull request has its own Formula/mopm.rb)"
           fi
 
+      # The same for buildrules: test/fixtures/buildrules_live.rb is the renderer's output for the real release v0.0.8 (CLI tarballs
+      # named buildrules-cli-<V>-<target>.tar.gz, the real SHA256SUMS). It proves that brew accepts the asset stem the guard admits
+      # and that the command line installs and reports its version.
+      - name: Live fixture (buildrules)
+        run: |
+          set -eu
+          if [ "$(cat "$RUNNER_TEMP/live")" = yes ] && ! grep -qx buildrules "$RUNNER_TEMP/formulae"; then
+            tap="$(brew --repository "${GITHUB_REPOSITORY_OWNER}/tap")"
+            mkdir -p "$tap/Formula"
+            cp test/fixtures/buildrules_live.rb "$tap/Formula/buildrules.rb"
+            echo buildrules >> "$RUNNER_TEMP/formulae"
+            echo "live fixture: test/fixtures/buildrules_live.rb is checked as ${GITHUB_REPOSITORY_OWNER}/tap/buildrules"
+          else
+            echo "live fixture: buildrules not checked (no .github/ or test/ change, or the pull request has its own Formula/buildrules.rb)"
+          fi
+
       - name: Audit (strict)
         run: |
           set -eu
