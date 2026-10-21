@@ -456,3 +456,45 @@ test('accepts the live fixture (mopm 0.0.10, the real SHA256SUMS) as a new formu
   const s = scenario(Object.assign({ head: live, version: '0.0.10', base: old, files: [{ filename: 'Formula/mopm.rb', status: 'modified' }] }, MOPM));
   assert.equal((await g.decide(s.ctx)).version, '0.0.10');
 });
+
+// ---- buildrules: the per-formula asset stem (ASSET_STEMS) ----
+// buildrules ships its command line as buildrules-cli-<V>-<target>.tar.gz (its source archive owns buildrules-<V>.tar.gz), so the
+// template binds ITS tarballs to that stem and every other formula to its own name. The fixtures are the release tool's output.
+const BR = { owner: 'komira-ai', formula: 'buildrules' };
+const brFixture = fixture('buildrules.rb');
+const brOk = (head, extra) => g.decide(scenario(Object.assign({ head }, BR, extra)).ctx);
+test('accepts the buildrules fixture for branch bump/buildrules-v1.2.3 (CLI tarballs named buildrules-cli-<V>-<target>)', async () => {
+  assert.match(brFixture, /buildrules-cli-1\.2\.3-macos-arm64\.tar\.gz/);
+  assert.deepEqual(await brOk(brFixture), { formula: 'buildrules', version: '1.2.3', path: 'Formula/buildrules.rb' });
+});
+test('accepts the live buildrules fixture (0.0.8, the real SHA256SUMS), and as a bump over 0.0.7', async () => {
+  const live = fixture('buildrules_live.rb');
+  assert.deepEqual(await brOk(live, { version: '0.0.8' }), { formula: 'buildrules', version: '0.0.8', path: 'Formula/buildrules.rb' });
+  const s = scenario(Object.assign({ head: live, version: '0.0.8', base: live.replace(/0\.0\.8/g, '0.0.7'), files: [{ filename: 'Formula/buildrules.rb', status: 'modified' }] }, BR));
+  assert.equal((await g.decide(s.ctx)).version, '0.0.8');
+});
+const brRefusedAt = (name, head, at, extra) => refused(name, Object.assign({ head }, BR, extra), ' line ' + at + ' ');
+brRefusedAt('a buildrules formula with buildrules-<V> tarball names (the source archive\'s name)', brFixture.replace(/buildrules-cli-1\.2\.3-/g, 'buildrules-1.2.3-'), 8);
+brRefusedAt('a buildrules formula with only its last tarball on the formula-name stem', brFixture.replace('buildrules-cli-1.2.3-linux-x86_64', 'buildrules-1.2.3-linux-x86_64'), 19);
+brRefusedAt('a buildrules formula with the stem doubled (buildrules-cli-cli)', brFixture.replace(/buildrules-cli-1\.2\.3-/g, 'buildrules-cli-cli-1.2.3-'), 8);
+brRefusedAt('the golden of mopm under the buildrules branch', golden, 1);
+mopmRefusedAt('a mopm formula with a mopm-cli stem (the map is for buildrules only)', golden.replace(/mopm-1\.2\.3-/g, 'mopm-cli-1.2.3-'), 8);
+mopmRefusedAt('a mopm formula with a buildrules-cli stem', golden.replace(/mopm-1\.2\.3-/g, 'buildrules-cli-1.2.3-'), 8);
+test('ASSET_STEMS holds buildrules only; template: buildrules urls use the stem, mopm and others their own name', () => {
+  assert.deepEqual(g.ASSET_STEMS, { buildrules: 'buildrules-cli' });
+  const urls = (name) => g.template(name, '1.2.3', 'komira-ai').map((p) => p.join('')).filter((l) => /^ +url /.test(l));
+  assert.deepEqual(urls('buildrules').map((l) => /\/([^/]*)"$/.exec(l)[1]), ['buildrules-cli-1.2.3-macos-arm64.tar.gz', 'buildrules-cli-1.2.3-linux-aarch64.tar.gz', 'buildrules-cli-1.2.3-linux-x86_64.tar.gz']);
+  assert.ok(urls('buildrules').every((l) => l.includes('/komira-ai/buildrules/releases/download/v1.2.3/')), 'the repository stays the formula name');
+  assert.ok(urls('mopm').every((l) => l.includes('/mopm-1.2.3-')));
+  assert.ok(urls('constructor').every((l) => l.includes('/constructor-1.2.3-')), 'a name on the prototype chain is not in the map');
+});
+test('baseVersion reads buildrules by its stem, and refuses the formula-name stem', () => {
+  assert.equal(g.baseVersion(brFixture, 'b', 'buildrules', 'komira-ai'), '1.2.3');
+  assert.equal(g.baseVersion(fixture('buildrules_live.rb'), 'b', 'buildrules', 'komira-ai'), '0.0.8');
+  assert.throws(() => g.baseVersion(brFixture.replace(/buildrules-cli-/g, 'buildrules-'), 'b', 'buildrules', 'komira-ai'), (e) => e instanceof g.Refusal && e.message.includes('not a release url'));
+  assert.throws(() => g.baseVersion(golden.replace(/mopm-1\.2\.3-/g, 'mopm-cli-1.2.3-'), 'b', 'mopm', 'komira-ai'), (e) => e instanceof g.Refusal && e.message.includes('not a release url'));
+});
+test('every one-line mutant of the buildrules fixture is refused (delete, duplicate, append " # x", change one literal character)', async () => {
+  const n = await mutantsOf('buildrules fixture', brFixture, 'buildrules', '1.2.3', 'komira-ai');
+  assert.ok(n > 700, 'only ' + n + ' mutants were generated');
+});

@@ -107,6 +107,9 @@ end
 branch (so one name and one version, and every url's version is that one version: the urls carry it, there is no `version` line), `<owner>` is this repository's owner.
 The targets are exactly `linux-x86_64`, `linux-aarch64` and `macos-arm64`, in the renderer's nesting; there is no Intel
 macOS. The only free text is `desc`, `homepage` and `license`, and the three hashes.
+`<name>` in the tarball file name is the formula name, except for a formula in the guard's `ASSET_STEMS` map: `buildrules` ships
+its command line as `buildrules-cli-<V>-<target>.tar.gz` (its source archive owns `buildrules-<V>.tar.gz`), so its file name stem
+is `buildrules-cli`. The repository, `install` and `test` lines keep the formula name. Any other stem is a refusal.
 
 Because only the listed lines can be present, there is no Ruby the formula can carry that the list does not name: no extra
 method, `send`, `eval`, `require`, heredoc, second `url`, any `version` line (`brew audit --strict` refuses one equal to the

@@ -45,6 +45,12 @@ const TARGETS = [
   { os: 'linux', cpu: 'intel', suffix: 'linux-x86_64' },
 ];
 
+// The release tarball stem of a formula whose tarballs are not named after it: the file is `<stem>-<V>-<target>.tar.gz`. Only the
+// file name stem differs; the repository, the install and the test line keep the formula name. A formula not listed here uses its
+// own name. `buildrules` ships its command line as `buildrules-cli-...` because its source archive owns `buildrules-<V>.tar.gz`.
+const ASSET_STEMS = { buildrules: 'buildrules-cli' };
+const assetStem = (name) => (Object.prototype.hasOwnProperty.call(ASSET_STEMS, name) ? ASSET_STEMS[name] : name);
+
 // `mopm` is `Mopm`, `my-tool` is `MyTool`: the renderer's className.
 function className(name) {
   let out = '';
@@ -61,6 +67,7 @@ function className(name) {
 // in the repository `owner/name`.
 function template(name, version, owner) {
   const base = 'https://github.com/' + owner + '/' + name + '/releases/download/v' + version + '/';
+  const stem = assetStem(name);
   const t = [
     ['class ' + className(name) + ' < Formula'],
     ['  desc "', TEXT, '"'],
@@ -74,7 +81,7 @@ function template(name, version, owner) {
         if (tg.os !== os || tg.cpu !== cpu) continue;
         t.push(
           ['    on_' + cpu + ' do'],
-          ['      url "' + base + name + '-' + version + '-' + tg.suffix + '.tar.gz"'],
+          ['      url "' + base + stem + '-' + version + '-' + tg.suffix + '.tar.gz"'],
           ['      sha256 "', SHA, '"'],
           ['    end'],
         );
@@ -129,7 +136,7 @@ function compareSemver(a, b) {
 // and file name version agree, all urls must name one version, and there must be at least one. An old-shape `version` line is
 // tolerated (at most one, and it must equal the urls' version); it is never the source of the version.
 function baseVersion(text, where, name, owner) {
-  const urlRe = new RegExp('^\\s*url "https://github\\.com/' + escapeRe(owner) + '/' + escapeRe(name) + '/releases/download/v(' + SEMVER + ')/' + escapeRe(name) + '-(' + SEMVER + ')-[a-z0-9_-]+\\.tar\\.gz"$');
+  const urlRe = new RegExp('^\\s*url "https://github\\.com/' + escapeRe(owner) + '/' + escapeRe(name) + '/releases/download/v(' + SEMVER + ')/' + escapeRe(assetStem(name)) + '-(' + SEMVER + ')-[a-z0-9_-]+\\.tar\\.gz"$');
   const urls = new Set();
   const declared = [];
   let n = 0;
@@ -218,4 +225,4 @@ async function run({ github, context, core, botLogin }) {
   return r;
 }
 
-module.exports = { run, decide, compareSemver, baseVersion, template, checkTemplate, className, Refusal, SEMVER_RE, BRANCH_RE, TARGETS };
+module.exports = { run, decide, compareSemver, baseVersion, template, checkTemplate, className, ASSET_STEMS, Refusal, SEMVER_RE, BRANCH_RE, TARGETS };

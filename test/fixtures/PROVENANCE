@@ -33,3 +33,15 @@ mopm_live.rb is the renderer's output for the REAL release v0.0.10, with that re
    guard accepts it too (test/guard_test.js).
 
 Re-render these when the renderer changes; the guard tests read them as data.
+
+buildrules.rb and buildrules_live.rb: the formula of `buildrules`, whose command line ships as buildrules-cli-<V>-<target>.tar.gz
+(the source archive owns buildrules-<V>.tar.gz); the guard maps that stem in ASSET_STEMS.
+
+buildrules.rb is tools/channels/testdata/tap_guard_buildrules.rb of komira-ai/buildrules at 123f1fd5d9dc7165111be12a43b66bcb831e853c
+(pull request 25, branch release/channels-b7b8), minus its leading comment lines (those are not part of the file: the tool's own
+test compares everything below them with what its release workflow's render command writes). Version 1.2.3, placeholder checksums.
+
+buildrules_live.rb is that file for the REAL release v0.0.8 with its real checksums: the same lines with 1.2.3 replaced by 0.0.8 and
+the three placeholder checksums replaced by the release's SHA256SUMS lines for buildrules-cli-0.0.8-{macos-arm64,linux-aarch64,
+linux-x86_64}.tar.gz (21b35d05..., b0afe981..., e5834c0f...). It was edited from the fixture, not rendered by the tool. The check
+workflow audits (strict), styles, installs and tests it as komira-ai/tap/buildrules on a pull request that changes .github/ or test/.
