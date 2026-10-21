@@ -1,0 +1,87 @@
+# Job 2 of 2 of the tap's checks: the tests of the guard and the lint, then brew audit, style, install and test of the
+# formulae that changed. The job is named exactly
+# `check`; the repository ruleset requires a status check with that name, so renaming the job (or adding a matrix, which
+# suffixes the name) makes every PR unmergeable. test/lint_test.js pins the name, both triggers and the absence of a matrix.
+#
+# It runs on pull_request (the pull request's merge commit, with a read-only token and no secrets) and on push to main (every
+# formula). It does not decide what may change: that is the `guard` workflow, which runs main's copy of itself. Brew evaluates
+# the formula's Ruby, which is why this job holds no secret and no write permission.
+# Only GitHub-owned actions are used, each pinned by commit.
+name: check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The tests of the guard (test/guard_test.js) and of the workflow lint (test/lint_test.js), with node's built-in test
+      # runner and the node the runner image ships: no dependency is installed and no action beyond the pinned ones is used.
+      # They read this checkout as data; a failure fails the job. Named files, not a directory: the runner's directory
+      # handling differs between node versions.
+      - name: Guard and lint tests
+        run: node --test test/guard_test.js test/lint_test.js
+
+      # The formulae to check: those a pull request adds or modifies, or all of them on a push to main. May be none (the
+      # directory is empty until a tool publishes its first formula, and a pull request may touch no formula).
+      - name: Formulae to check
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -eu
+          : > "$RUNNER_TEMP/formulae"
+          if [ "$EVENT" = pull_request ]; then
+            git diff --name-only --diff-filter=AM "$BASE" HEAD -- Formula > "$RUNNER_TEMP/changed"
+          else
+            git ls-files Formula > "$RUNNER_TEMP/changed"
+          fi
+          grep -E '^Formula/[a-z0-9][a-z0-9-]*\.rb$' "$RUNNER_TEMP/changed" | sed 's|^Formula/||; s|\.rb$||' > "$RUNNER_TEMP/formulae" || true
+          echo "formulae: $(tr '\n' ' ' < "$RUNNER_TEMP/formulae")"
+
+      - name: Tap this checkout
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: brew tap "${GITHUB_REPOSITORY_OWNER}/tap" "$WORKSPACE"
+
+      - name: Audit (strict)
+        run: |
+          set -eu
+          for f in $(cat "$RUNNER_TEMP/formulae"); do brew audit --strict --online --formula "${GITHUB_REPOSITORY_OWNER}/tap/$f"; done
+
+      - name: Style
+        run: |
+          set -eu
+          for f in $(cat "$RUNNER_TEMP/formulae"); do brew style --formula "${GITHUB_REPOSITORY_OWNER}/tap/$f"; done
+
+      - name: Install
+        run: |
+          set -eu
+          for f in $(cat "$RUNNER_TEMP/formulae"); do brew install --formula "${GITHUB_REPOSITORY_OWNER}/tap/$f"; done
+
+      - name: Test
+        run: |
+          set -eu
+          for f in $(cat "$RUNNER_TEMP/formulae"); do brew test "${GITHUB_REPOSITORY_OWNER}/tap/$f"; done

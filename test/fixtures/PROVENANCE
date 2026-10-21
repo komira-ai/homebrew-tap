@@ -1,0 +1,19 @@
+These four files are formulas written by the release tool's own formula renderer (tools/channels/formula.zig in komira-ai/mopm,
+the `channels formula` command), not by hand. The checksums are the placeholder ones of that repository's test fixture.
+
+Built on a remote build farm from the repository's `//:channels` target, then run there as one Buck2 action per file:
+
+  channels formula --sums tests/channels/fixtures/SHA256SUMS --name mopm --version 1.2.3 \
+    --desc "Package manager for Mojo" --homepage https://mopm.dev --license Apache-2.0 --out <file> \
+    <flags below>
+
+mopm.rb                       --repo komira-ai/mopm
+mopm_no_version.rb            --repo komira-ai/mopm --no-explicit-version
+mopm_file_url.rb              --url-base file:///tmp/dist/
+   these three: komira-ai/mopm pull request 142 (drop the Intel Mac release), head bb32d4c31371c2f03400c46cda1db74a3ea5cf7d,
+   whose SHA256SUMS fixture lists three tarballs. mopm.rb is byte-identical to that commit's tests/channels/golden/mopm.rb.
+mopm_with_macos_intel.rb      --repo komira-ai/mopm
+   the renderer on komira-ai/mopm main at 8546b5c03c8077590defc140a73785ff8627f2d4 (four tarballs, with macos-x86_64);
+   byte-identical to that commit's golden. The guard must refuse it: Intel macOS is no longer a release platform.
+
+Re-render these when the renderer changes; the guard tests read them as data.
