@@ -1,19 +1,35 @@
-These four files are formulas written by the release tool's own formula renderer (tools/channels/formula.zig in komira-ai/mopm,
-the `channels formula` command), not by hand. The checksums are the placeholder ones of that repository's test fixture.
+These fixtures are formulas written by the release tool's own formula renderer (tools/channels/formula.zig in komira-ai/mopm,
+the `channels formula` command), not by hand. The renderer is built on a remote build farm from the repository's `//:channels`
+target at komira-ai/mopm main 3ace214 (pull request 120 merged), then run there as one Buck2 action per file. The tap's formula
+has no `version` line: the renderer's `--no-explicit-version` writes that shape, because `brew audit --strict` refuses a
+`version` equal to the one scanned from the urls ("version is redundant").
 
-Built on a remote build farm from the repository's `//:channels` target, then run there as one Buck2 action per file:
+The first four use the placeholder checksums of that repository's test fixture (tests/channels/fixtures/SHA256SUMS), version 1.2.3:
 
   channels formula --sums tests/channels/fixtures/SHA256SUMS --name mopm --version 1.2.3 \
     --desc "Package manager for Mojo" --homepage https://mopm.dev --license Apache-2.0 --out <file> \
     <flags below>
 
-mopm.rb                       --repo komira-ai/mopm
-mopm_no_version.rb            --repo komira-ai/mopm --no-explicit-version
-mopm_file_url.rb              --url-base file:///tmp/dist/
-   these three: komira-ai/mopm pull request 142 (drop the Intel Mac release), head bb32d4c31371c2f03400c46cda1db74a3ea5cf7d,
-   whose SHA256SUMS fixture lists three tarballs. mopm.rb is byte-identical to that commit's tests/channels/golden/mopm.rb.
+mopm.rb                       --repo komira-ai/mopm --no-explicit-version
+   the golden: what the bot submits, and the one shape the guard admits.
+mopm_with_version.rb          --repo komira-ai/mopm
+   the renderer's default (with a `version` line, as its tests/channels/golden/mopm.rb). The guard must refuse it, and accept it
+   only as the formula already on main (the old shape), for the monotonic read.
+mopm_file_url.rb              --url-base file:///tmp/dist/ --no-explicit-version
+   the renderer with a file:// base; refused.
 mopm_with_macos_intel.rb      --repo komira-ai/mopm
-   the renderer on komira-ai/mopm main at 8546b5c03c8077590defc140a73785ff8627f2d4 (four tarballs, with macos-x86_64);
-   byte-identical to that commit's golden. The guard must refuse it: Intel macOS is no longer a release platform.
+   the renderer before the Intel Mac release was dropped (four tarballs, with macos-x86_64, and a version line): komira-ai/mopm
+   main at 8546b5c03c8077590defc140a73785ff8627f2d4, byte-identical to that commit's golden. The guard must refuse it as a
+   head formula (Intel macOS is no longer a release platform) and read the version of it as a base formula.
+
+mopm_live.rb is the renderer's output for the REAL release v0.0.10, with that release's real checksums:
+
+  curl -L https://github.com/komira-ai/mopm/releases/download/v0.0.10/SHA256SUMS > SHA256SUMS
+  channels formula --sums SHA256SUMS --name mopm --version 0.0.10 --desc "Package manager for Mojo" \
+    --homepage https://mopm.dev --license Apache-2.0 --repo komira-ai/mopm --no-explicit-version --out mopm_live.rb
+
+   The check workflow audits (strict), styles, installs and tests it on a pull request that changes .github/ or test/, so brew's
+   acceptance of the shape and the install of a real release are proven by the pull request's own check, not assumed. The
+   guard accepts it too (test/guard_test.js).
 
 Re-render these when the renderer changes; the guard tests read them as data.

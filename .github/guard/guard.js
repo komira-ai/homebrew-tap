@@ -23,7 +23,9 @@ const refuse = (why) => {
 // A line is an array of parts. A string part is a literal, matched character for character. A hole is one of the two objects
 // below. Everything else the renderer writes (the class name, the formula name, the version, the owner, each url) is a literal
 // here, because the guard already knows it: the name and the version come from the branch, the owner from this repository.
-// So "one name, one version, every url's version equal to the version line" holds by construction.
+// So "one name, one version, every url's version equal to the branch's" holds by construction. There is deliberately NO
+// `version` line: brew derives the version from the url, and `brew audit --strict` refuses a `version` line equal to it
+// ("version is redundant with version scanned from URL"). The version is bound through the urls instead.
 //
 // TEXT is the renderer's `plainText` (desc, homepage, license): non-empty, no control character, no `"`, no `\`, no `#`. Such
 // text cannot leave its string literal, interpolate, or hold a newline.
@@ -63,7 +65,6 @@ function template(name, version, owner) {
     ['class ' + className(name) + ' < Formula'],
     ['  desc "', TEXT, '"'],
     ['  homepage "', TEXT, '"'],
-    ['  version "' + version + '"'],
     ['  license "', TEXT, '"'],
   ];
   for (const os of ['macos', 'linux']) {
@@ -122,18 +123,34 @@ function compareSemver(a, b) {
   return 0;
 }
 
-// The version of the formula already on main. That text is history the guard accepted earlier (it is not a pull request's
-// input), and it may be in an older shape than the template, so it is not matched against the template: exactly one line
-// `  version "..."` is read, and none, several or a non-X.Y.Z one is a refusal (fail closed).
-function baseVersion(text, where) {
-  const v = [];
+// The version of the formula already on main, read from its urls. That text is history the guard accepted earlier (it is not a
+// pull request's input), and it may be in an older shape than the template (for one, with a `version "X.Y.Z"` line), so it is
+// not matched against the template. Fail closed: every `url` line must be a release url of `owner/name` whose directory version
+// and file name version agree, all urls must name one version, and there must be at least one. An old-shape `version` line is
+// tolerated (at most one, and it must equal the urls' version); it is never the source of the version.
+function baseVersion(text, where, name, owner) {
+  const urlRe = new RegExp('^\\s*url "https://github\\.com/' + escapeRe(owner) + '/' + escapeRe(name) + '/releases/download/v(' + SEMVER + ')/' + escapeRe(name) + '-(' + SEMVER + ')-[a-z0-9_-]+\\.tar\\.gz"$');
+  const urls = new Set();
+  const declared = [];
+  let n = 0;
   for (const line of text.split('\n')) {
-    const m = /^  version "([^"]*)"$/.exec(line);
-    if (m !== null) v.push(m[1]);
+    if (/^\s*url\b/.test(line)) {
+      n++;
+      const m = urlRe.exec(line);
+      if (m === null) refuse(where + ' has a url line that is not a release url of ' + owner + '/' + name + ': ' + shown(line));
+      // m[1] and m[5] are the two versions (each SEMVER holds three groups, so the second one starts at group 5).
+      if (m[1] !== m[5]) refuse(where + ' has a url whose directory version ' + m[1] + ' differs from its file name version ' + m[5]);
+      urls.add(m[1]);
+    }
+    const v = /^  version "([^"]*)"$/.exec(line);
+    if (v !== null) declared.push(v[1]);
   }
-  if (v.length !== 1) refuse(where + ' declares ' + v.length + ' version lines, expected exactly 1');
-  if (!SEMVER_RE.test(v[0])) refuse(where + ' has version ' + JSON.stringify(v[0]) + ', which is not X.Y.Z (no prerelease, no build metadata)');
-  return v[0];
+  if (n === 0) refuse(where + ' declares 0 url lines, expected at least 1');
+  if (urls.size !== 1) refuse(where + ' has urls of ' + urls.size + ' different versions, expected 1');
+  const version = [...urls][0];
+  if (declared.length > 1) refuse(where + ' declares ' + declared.length + ' version lines, expected at most 1');
+  if (declared.length === 1 && declared[0] !== version) refuse(where + ' declares version ' + JSON.stringify(declared[0]) + ', but its urls are of ' + version);
+  return version;
 }
 
 // `ctx`: { github, context, botLogin }. Throws Refusal (message starts "path guard refused:") or an API error.
@@ -181,7 +198,7 @@ async function decide({ github, context, botLogin }) {
   const before = await read(pr.base.sha);
   if (f.status === 'modified' && before === null) refuse(path + ' is modified but is not on the base');
   if (before !== null) {
-    const old = baseVersion(before, path + ' on the base');
+    const old = baseVersion(before, path + ' on the base', formula, owner);
     if (compareSemver(version, old) <= 0) refuse('version ' + version + ' is not higher than ' + old + ' on the base');
   }
 
