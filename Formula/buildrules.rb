@@ -5,19 +5,19 @@ class Buildrules < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/komira-ai/buildrules/releases/download/v0.0.24/buildrules-cli-0.0.24-macos-arm64.tar.gz"
-      sha256 "3c4f095449e61c802bb2a9678455ca73eb26cf4f46b32de08ccc7211b808de1f"
+      url "https://github.com/komira-ai/buildrules/releases/download/v0.0.25/buildrules-cli-0.0.25-macos-arm64.tar.gz"
+      sha256 "98153a028c672bac22752daec27c901a08df0134219afd3d2b691479a8d24342"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/komira-ai/buildrules/releases/download/v0.0.24/buildrules-cli-0.0.24-linux-aarch64.tar.gz"
-      sha256 "b418351addbd5be70453e9553c17219e68ab98e757f73a05851107789df6b267"
+      url "https://github.com/komira-ai/buildrules/releases/download/v0.0.25/buildrules-cli-0.0.25-linux-aarch64.tar.gz"
+      sha256 "550ddac499594158217260108e8b54dd45919d5fa9200b88b7e2a6d9074854b7"
     end
     on_intel do
-      url "https://github.com/komira-ai/buildrules/releases/download/v0.0.24/buildrules-cli-0.0.24-linux-x86_64.tar.gz"
-      sha256 "cd8871fa78688f542c95be4791468a0726fc0f41ecb10e2836cdc930b62d1636"
+      url "https://github.com/komira-ai/buildrules/releases/download/v0.0.25/buildrules-cli-0.0.25-linux-x86_64.tar.gz"
+      sha256 "2794381d28d7b67675ed4301470b3aa1415011307f845f70395102ea496878e0"
     end
   end
 
