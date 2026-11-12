@@ -31,7 +31,11 @@ jobs:
       - name: Tap this checkout
         env:
           WORKSPACE: ${{ github.workspace }}
-        run: brew tap "${GITHUB_REPOSITORY_OWNER}/tap" "$WORKSPACE"
+        run: |
+          set -eu
+          brew tap "${GITHUB_REPOSITORY_OWNER}/tap" "$WORKSPACE"
+          # A Homebrew that refuses formulae from an untrusted tap has the trust command; an older one does not.
+          if brew commands | grep -qx trust; then brew trust "${GITHUB_REPOSITORY_OWNER}/tap"; fi
 
       - name: Install and test
         run: |

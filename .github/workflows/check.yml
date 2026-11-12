@@ -77,7 +77,11 @@ jobs:
       - name: Tap this checkout
         env:
           WORKSPACE: ${{ github.workspace }}
-        run: brew tap "${GITHUB_REPOSITORY_OWNER}/tap" "$WORKSPACE"
+        run: |
+          set -eu
+          brew tap "${GITHUB_REPOSITORY_OWNER}/tap" "$WORKSPACE"
+          # This Homebrew refuses to load a formula from a tap it was not told to trust.
+          brew trust "${GITHUB_REPOSITORY_OWNER}/tap"
 
       # The renderer's output for a real release, test/fixtures/mopm_live.rb (mopm 0.0.10, with the release's real SHA256SUMS),
       # goes through the same audit, style, install and test below as a formula, so a pull request that touches .github/ or
