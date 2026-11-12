@@ -1,5 +1,6 @@
-# Job 2 of 2 of the tap's checks: the tests of the guard and the lint, then brew audit, style, install and test of the
-# formulae that changed. The job is named exactly
+# Job 2 of 2 of the PR checks: the tests of the guard and the lint, then brew audit, style, install and test of the
+# formulae that changed, on Linux x86_64 (Homebrew on Linux, the formulae's linux-x86_64 entries). Pull requests run on Linux
+# x86_64 only; macOS install and test run after the merge, in macos-beta.yml. The job is named exactly
 # `check`; the repository ruleset requires a status check with that name, so renaming the job (or adding a matrix, which
 # suffixes the name) makes every PR unmergeable. test/lint_test.js pins the name, both triggers and the absence of a matrix.
 #
@@ -25,7 +26,7 @@ concurrency:
 jobs:
   check:
     name: check
-    runs-on: macos-14
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
@@ -65,10 +66,22 @@ jobs:
           grep -E '^Formula/[a-z0-9][a-z0-9-]*\.rb$' "$RUNNER_TEMP/changed" | sed 's|^Formula/||; s|\.rb$||' > "$RUNNER_TEMP/formulae" || true
           echo "formulae: $(tr '\n' ' ' < "$RUNNER_TEMP/formulae")"
 
+      # The hosted Ubuntu image ships Homebrew on Linux; this puts it on PATH when the image has not.
+      - name: Homebrew on PATH
+        run: |
+          set -eu
+          if ! command -v brew > /dev/null; then
+            echo /home/linuxbrew/.linuxbrew/bin >> "$GITHUB_PATH"
+          fi
+
       - name: Tap this checkout
         env:
           WORKSPACE: ${{ github.workspace }}
-        run: brew tap "${GITHUB_REPOSITORY_OWNER}/tap" "$WORKSPACE"
+        run: |
+          set -eu
+          brew tap "${GITHUB_REPOSITORY_OWNER}/tap" "$WORKSPACE"
+          # This Homebrew refuses to load a formula from a tap it was not told to trust.
+          brew trust "${GITHUB_REPOSITORY_OWNER}/tap"
 
       # The renderer's output for a real release, test/fixtures/mopm_live.rb (mopm 0.0.10, with the release's real SHA256SUMS),
       # goes through the same audit, style, install and test below as a formula, so a pull request that touches .github/ or

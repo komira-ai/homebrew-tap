@@ -10,10 +10,12 @@ const lint = require('../.github/guard/lint.js');
 const dir = path.join(__dirname, '..', '.github', 'workflows');
 const guardText = fs.readFileSync(path.join(dir, 'guard.yml'), 'utf8');
 const checkText = fs.readFileSync(path.join(dir, 'check.yml'), 'utf8');
+const betaText = fs.readFileSync(path.join(dir, 'macos-beta.yml'), 'utf8');
 
 const { test } = require('node:test');
 
 test('guard.yml is clean', () => assert.deepEqual(lint.guard(guardText), []));
+test('macos-beta.yml is clean', () => assert.deepEqual(lint.macosBeta(betaText), []));
 test('check.yml is clean', () => assert.deepEqual(lint.check(checkText), []));
 
 const mutate = (text, from, to) => {
@@ -22,7 +24,7 @@ const mutate = (text, from, to) => {
 };
 
 const reported = (which, name, from, to, reason) => test(which + ' mutant: ' + name, () => {
-  const text = which === 'guard' ? guardText : checkText;
+  const text = { guard: guardText, check: checkText, macosBeta: betaText }[which];
   const p = lint[which](mutate(text, from, to));
   assert.ok(p.some((x) => x.includes(reason)), 'expected a problem containing ' + JSON.stringify(reason) + ', got ' + JSON.stringify(p));
 });
@@ -83,8 +85,13 @@ reported('guard', 'a second runs-on', '    timeout-minutes: 10\n', '    timeout-
 reported('guard', 'a runner that only starts like the pin', 'runs-on: ubuntu-24.04', 'runs-on: ubuntu-24x04', 'runs-on is not exactly');
 
 // check.yml
-reported('check', 'a runner other than macos-14', 'runs-on: macos-14', 'runs-on: macos-latest', 'runs-on is not exactly');
-reported('check', 'a self-hosted runner', 'runs-on: macos-14', 'runs-on: [self-hosted, macOS]', 'runs-on is not exactly');
+reported('check', 'a runner other than ubuntu-24.04', 'runs-on: ubuntu-24.04', 'runs-on: ubuntu-latest', 'runs-on is not exactly');
+reported('check', 'a self-hosted runner', 'runs-on: ubuntu-24.04', 'runs-on: [self-hosted, linux]', 'runs-on is not exactly');
+// A pull_request workflow on any platform but Linux x86_64 is reported.
+reported('check', 'a macOS runner on a pull request', 'runs-on: ubuntu-24.04', 'runs-on: macos-14', 'not a Linux x86_64 hosted runner');
+reported('check', 'a macOS runner on a pull request (macos-latest)', 'runs-on: ubuntu-24.04', 'runs-on: macos-latest', 'not a Linux x86_64 hosted runner');
+reported('check', 'an arm Linux runner on a pull request', 'runs-on: ubuntu-24.04', 'runs-on: ubuntu-24.04-arm', 'not a Linux x86_64 hosted runner');
+reported('check', 'a Windows runner on a pull request', 'runs-on: ubuntu-24.04', 'runs-on: windows-2025', 'not a Linux x86_64 hosted runner');
 reported('check', 'if: on the check job', '    timeout-minutes: 30\n', "    timeout-minutes: 30\n    if: github.event_name == 'push'\n", 'if: condition');
 reported('check', 'if: on a step', '      - name: Tap this checkout\n', '      - name: Tap this checkout\n        if: false\n', 'if: condition');
 reported('check', 'the test step removed', '      - name: Guard and lint tests\n        run: node --test test/guard_test.js test/lint_test.js\n', '', 'Guard and lint tests');
@@ -113,6 +120,14 @@ reported('check', 'the buildrules live fixture step not copying its fixture', 'c
 reported('check', 'the buildrules live fixture step not listing buildrules', '            echo buildrules >> "$RUNNER_TEMP/formulae"\n', '', 'Live fixture (buildrules)');
 reported('check', 'the buildrules live fixture step removed', '      - name: Live fixture (buildrules)\n', '      - name: Something else\n', 'Live fixture (buildrules)');
 reported('check', 'the live fixture chosen by a change under .github/ only', "'^(\\.github|test)/'", "'^(\\.github)/'", 'live fixture is not chosen');
+// macos-beta.yml: the post-merge stage
+reported('macosBeta', 'a pull_request trigger', 'on:\n  push:', 'on:\n  pull_request:\n  push:', 'a pull_request trigger is declared');
+reported('macosBeta', 'a push trigger on another branch', 'branches: [main]', 'branches: [dev]', 'the only trigger is not push to main');
+reported('macosBeta', 'a runner other than macos-14', 'runs-on: macos-14', 'runs-on: macos-latest', 'runs-on is not exactly');
+reported('macosBeta', 'job renamed', '    name: macos\n', '    name: macos-arm64\n', 'the job is not "macos" named "macos"');
+reported('macosBeta', 'write permission', 'permissions:\n  contents: read\n\nconcurrency', 'permissions:\n  contents: write\n\nconcurrency', 'workflow permissions');
+reported('macosBeta', 'an if: condition', '    timeout-minutes: 30\n', "    timeout-minutes: 30\n    if: false\n", 'if: condition');
+reported('macosBeta', 'an action pinned by tag', 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1', 'actions/checkout@v7', 'pinned by commit');
 test('a comment that mentions a matrix, a secret or pull_request_target is not a finding', () => {
   const text = checkText.replace('name: check\n', 'name: check\n# matrix secrets.X pull_request_target workflow_dispatch\n');
   assert.deepEqual(lint.check(text), []);

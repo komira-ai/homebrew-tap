@@ -97,10 +97,19 @@ function guard(text) {
   return p;
 }
 
+// Pull requests run on Linux x86_64 hosted runners only: any other platform (macOS, Windows, arm, self-hosted) is a beta stage
+// after the merge (macos-beta.yml), never a pull request check.
+function pullRequestRunner(name, text, p) {
+  for (const m of text.matchAll(/^[ \t]*runs-on:[ \t]*(.*?)[ \t]*$/gm)) {
+    if (!/^ubuntu-[0-9.]+$/.test(m[1])) p.push(name + ': a pull_request workflow names the runner ' + JSON.stringify(m[1]) + ', which is not a Linux x86_64 hosted runner');
+  }
+}
+
 function check(text) {
   const p = [];
   const t = code(text);
-  common('check', t, p, 'macos-14');
+  common('check', t, p, 'ubuntu-24.04');
+  pullRequestRunner('check', t, p);
   if (has(t, /pull_request_target/)) p.push('check: runs on pull_request_target');
   if (!has(t, /^  pull_request:\n/m)) p.push('check: no pull_request trigger');
   if (!has(t, /^  push:\n    branches: \[main\]\n/m)) p.push('check: no push trigger on main');
@@ -120,4 +129,19 @@ function check(text) {
   return p;
 }
 
-module.exports = { guard, check, permissions };
+// The macOS beta stage: runs after the merge, never on a pull request.
+function macosBeta(text) {
+  const p = [];
+  const t = code(text);
+  common('macos-beta', t, p, 'macos-14');
+  if (!has(t, /^on:\n  push:\n    branches: \[main\]\n\npermissions:/m)) p.push('macos-beta: the only trigger is not push to main');
+  if (has(t, /pull_request/)) p.push('macos-beta: a pull_request trigger is declared (macOS is a post-merge stage)');
+  if (!has(t, /^jobs:\n  macos:\n    name: macos\n/m)) p.push('macos-beta: the job is not "macos" named "macos"');
+  const top = permissions(t, 0);
+  if (top === null || top.join(',') !== 'contents: read') p.push('macos-beta: workflow permissions are not exactly contents: read');
+  const perms = permissions(t, 4);
+  if (perms !== null) p.push('macos-beta: a job permissions block is declared');
+  return p;
+}
+
+module.exports = { guard, check, macosBeta, permissions };
