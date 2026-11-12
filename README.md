@@ -18,9 +18,10 @@ or without tapping first: `brew install komira-ai/tap/mopm`. Other tools are lis
 `url` and `sha256` per platform, copied from the SHA256SUMS of the tool's release, and a
 `test do` that runs the tool and checks its output. The guard accepts only the shape the renderer writes (see "The allow-list").
 
-`.github/workflows/guard.yml` and `.github/workflows/check.yml` are the two workflows; `.github/guard/guard.js` is the guard's
+`.github/workflows/guard.yml` and `.github/workflows/check.yml` are the two pull request workflows (Linux x86_64 only), and
+`.github/workflows/macos-beta.yml` is the macOS stage that runs after a merge to `main`; `.github/guard/guard.js` is the guard's
 decision logic, and `test/` holds its tests and a lint of the workflows. The `check` job runs both test files with node's
-built-in test runner (`node --test test/guard_test.js test/lint_test.js`) on the GitHub-hosted runner, with no dependencies.
+built-in test runner (`node --test test/guard_test.js test/lint_test.js`) on the GitHub-hosted Linux runner, with no dependencies.
 
 ## How a formula changes
 
@@ -121,7 +122,7 @@ shape (it may still carry a `version` line), so it is not matched against the te
 above); none, mixed or non-X.Y.Z ones are a refusal, and so is a `version` line that disagrees with them.
 
 What the list does not prove: that the hashes are the release's (the bot copies them from the release's SHA256SUMS; `check`
-installs the formula on macOS), or that the description is true. A formula that matches the list can still be wrong, only not
+installs the formula with Homebrew on Linux, and `macos-beta` on macOS after the merge), or that the description is true. A formula that matches the list can still be wrong, only not
 dangerous in Ruby.
 
 #### When the formula's shape changes
@@ -149,15 +150,22 @@ renderer (`test/fixtures`, with `PROVENANCE`) and require it to accept the one t
 
 `test/lint_test.js` also pins, for `guard.yml`: no `github-token` input on the script step (it runs with the workflow's
 read-only token), no `types:` on the trigger (an event outside the list would skip the required check), and for both
-workflows exactly one `runs-on`, the pinned hosted image (`ubuntu-24.04` for `guard`, `macos-14` for `check`).
+workflows exactly one `runs-on`, the pinned hosted image (`ubuntu-24.04` for `guard` and for `check`, `macos-14` for `macos-beta`). Pull requests run on Linux x86_64 only: the lint
+reports a `pull_request` workflow whose runner is macOS, Windows, arm or self-hosted, and a `pull_request` trigger on `macos-beta.yml`.
 
 ## What `check` does
 
 `check` runs on `pull_request` and on `push` to `main`, with a read-only token and no secrets. First it runs the tests of the
 guard and of the workflow lint (node's built-in test runner; the node the runner image ships; no dependencies); a failing test
 fails the job. For each formula the PR adds or
-modifies (all of them on a push): `brew audit --strict --online`, `brew style`, `brew install`, `brew test`, on a macOS
-runner. A PR that changes no formula passes it trivially. `check` does not decide who may change what; `guard` does.
+modifies (all of them on a push): `brew audit --strict --online`, `brew style`, `brew install`, `brew test`, with Homebrew on
+a Linux x86_64 runner (`ubuntu-24.04`). A PR that changes no formula passes it trivially. `check` does not decide who may change what; `guard` does.
+
+## What `macos-beta` does
+
+Other platforms are a beta stage after the merge, not a pull request check. `macos-beta` runs on `push` to `main` only
+(never on a pull request), on `macos-14` with a read-only token and no secrets, and runs `brew install` and `brew test` of
+every formula on Apple silicon. A failure shows on `main`; it does not block a pull request. It is not a required check.
 
 ## Who can change what
 
@@ -177,5 +185,5 @@ merged, and the ruleset is restored. Editing a workflow in a pull request does n
 
 ## Not covered
 
-The runner is macOS on Apple silicon. Linux and macOS on Intel are installed from the same
-formula but are not installed by this check.
+The PR check installs the `linux-x86_64` entry of each formula. `linux-aarch64` is not installed by any check, and the
+`macos-arm64` entry is installed after the merge by `macos-beta`.

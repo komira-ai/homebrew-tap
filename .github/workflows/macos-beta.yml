@@ -1,0 +1,42 @@
+# The beta stage for macOS: after a change merges to main, every formula is installed and tested with Homebrew on Apple
+# silicon. Pull requests run on Linux x86_64 only (check.yml), so this workflow has no pull_request trigger; a failure here is
+# seen on main, not on the pull request. Read-only token, no secret. Only GitHub-owned actions are used, each pinned by commit.
+name: macos-beta
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-beta
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macos
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Tap this checkout
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: brew tap "${GITHUB_REPOSITORY_OWNER}/tap" "$WORKSPACE"
+
+      - name: Install and test
+        run: |
+          set -eu
+          for f in $(git ls-files Formula | grep -E '^Formula/[a-z0-9][a-z0-9-]*\.rb$' | sed 's|^Formula/||; s|\.rb$||'); do
+            brew install --formula "${GITHUB_REPOSITORY_OWNER}/tap/$f"
+            brew test "${GITHUB_REPOSITORY_OWNER}/tap/$f"
+          done
