@@ -5,19 +5,19 @@ class Mopm < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/komira-ai/mopm/releases/download/v0.0.121/mopm-0.0.121-macos-arm64.tar.gz"
-      sha256 "99170e275849b74fc5975cde2693af7a558732f059748001de3f509007d7f653"
+      url "https://github.com/komira-ai/mopm/releases/download/v0.0.123/mopm-0.0.123-macos-arm64.tar.gz"
+      sha256 "02c45ce8b8fc6c7a12cc5c8a51b756e32855fd305ab3cf95eb873fe966ef9b6d"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/komira-ai/mopm/releases/download/v0.0.121/mopm-0.0.121-linux-aarch64.tar.gz"
-      sha256 "07dca96dbffc15cfe4589207b157fbd758a90620401ef0b60bcfee6542c3f052"
+      url "https://github.com/komira-ai/mopm/releases/download/v0.0.123/mopm-0.0.123-linux-aarch64.tar.gz"
+      sha256 "9037422f979132731c618ab5db626fc98a1f6d05c3606b486f03c0616a7e19e5"
     end
     on_intel do
-      url "https://github.com/komira-ai/mopm/releases/download/v0.0.121/mopm-0.0.121-linux-x86_64.tar.gz"
-      sha256 "80d98998a45f8d68a74f492826e6d0d37f68027b2da0490f6d3115bdb131613c"
+      url "https://github.com/komira-ai/mopm/releases/download/v0.0.123/mopm-0.0.123-linux-x86_64.tar.gz"
+      sha256 "743e06e46164e8552b3e5575bcc27b2c20a3abeb41fa4807a31171b1ebc5ab02"
     end
   end
 
