@@ -5,19 +5,19 @@ class Tierstore < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/komira-ai/tierstore/releases/download/v0.3.197/tierstore-0.3.197-macos-arm64.tar.gz"
-      sha256 "08333c28fa86bbf09496d1416a7ddea69f1ff09eceecc070dc3ecdc5d08cad7a"
+      url "https://github.com/komira-ai/tierstore/releases/download/v0.3.212/tierstore-0.3.212-macos-arm64.tar.gz"
+      sha256 "15f6a66576f946d3d6eb54118ef1061dee2ea584e55e1775a6f9ded6dcd09bcd"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/komira-ai/tierstore/releases/download/v0.3.197/tierstore-0.3.197-linux-aarch64.tar.gz"
-      sha256 "63b319f77b1ff6d900c5e1dd9597e804e53904a6391614d12b7fab0dd1cb569a"
+      url "https://github.com/komira-ai/tierstore/releases/download/v0.3.212/tierstore-0.3.212-linux-aarch64.tar.gz"
+      sha256 "e6650ec61c97b59c2c12feac6e4705572ae3d89aa99502be2688742cf8b9e1a9"
     end
     on_intel do
-      url "https://github.com/komira-ai/tierstore/releases/download/v0.3.197/tierstore-0.3.197-linux-x86_64.tar.gz"
-      sha256 "4ea452c73ae5bbbee77da8180b24813c7c0bbcd877e704c4bc2cb0957a7d90e7"
+      url "https://github.com/komira-ai/tierstore/releases/download/v0.3.212/tierstore-0.3.212-linux-x86_64.tar.gz"
+      sha256 "ecf48dd1b6c2878283684d4983bd16c7c129025e0ca79fa3bb5c0aadbaff5058"
     end
   end
 
